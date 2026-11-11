@@ -19,9 +19,14 @@ const matchLink = /(?:^|[\s<(])https:\/\/(?:www\.)?gamersclub\.com\.br\/lobby\/m
 async function readMatch(id) {
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage();
+    const page = await browser.newPage({ locale: 'pt-BR' });
     await page.goto(`https://gamersclub.com.br/lobby/match/${id}`, { timeout: 20000, waitUntil: 'domcontentloaded' });
-    await page.getByText('Finalizado', { exact: true }).first().waitFor({ timeout: 12000 });
+    try {
+      await page.getByText('Finalizado', { exact: true }).first().waitFor({ timeout: 60000 });
+    } catch (error) {
+      console.log('Página da partida:', await page.title(), (await page.locator('body').innerText()).slice(0,350));
+      throw error;
+    }
     return await page.evaluate(() => {
       const teams = Array.from(document.querySelectorAll('table,[role="table"]')).flatMap((table) => {
         const rows = [...table.querySelectorAll('tr,[role="row"]')];
