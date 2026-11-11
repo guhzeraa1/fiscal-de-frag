@@ -23,22 +23,24 @@ async function readMatch(id) {
     await page.goto(`https://gamersclub.com.br/lobby/match/${id}`, { timeout: 20000, waitUntil: 'domcontentloaded' });
     await page.getByText('Finalizado', { exact: true }).first().waitFor({ timeout: 12000 });
     return await page.evaluate(() => {
-      const teams = Array.from(document.querySelectorAll('table')).flatMap((table) => {
-        const rows = [...table.rows];
-        const header = [...(rows[0]?.cells ?? [])];
+      const teams = Array.from(document.querySelectorAll('table,[role="table"]')).flatMap((table) => {
+        const rows = [...table.querySelectorAll('tr,[role="row"]')];
+        const cells = (row) => [...row.querySelectorAll('th,td,[role="cell"],[role="columnheader"]')];
+        const header = rows[0] ? cells(rows[0]) : [];
         const k = header.findIndex((cell) => cell.innerText.trim() === 'K');
         if (k < 1) return [];
         const score = Number(header[0].innerText.trim().match(/^\d+/)?.[0]);
         const players = rows.slice(1).flatMap((row) => {
           const profile = row.querySelector('a[href*="/player/"]');
           const id = profile?.getAttribute('href')?.match(/\/player\/(\d+)/)?.[1];
-          const detailsIndex = [...row.cells].findIndex((cell) => cell.contains(profile));
+          const rowCells = cells(row);
+          const detailsIndex = rowCells.findIndex((cell) => profile && cell.contains(profile));
           if (!id || detailsIndex !== 0) return [];
-          const extra = row.cells.length - header.length;
-          const rawKills = row.cells[k + extra]?.innerText.trim();
+          // GC has a notes cell and a level cell before the K column.
+          const rawKills = rowCells[k + 2]?.innerText.trim();
           if (!/^\d+$/.test(rawKills ?? '')) throw new Error('Coluna K indisponível.');
           const name = profile.innerText.trim() || profile.getAttribute('aria-label')
-            || profile.querySelector('img[alt]')?.alt || row.cells[0].querySelector('img[alt]:not([alt=""])')?.alt;
+            || profile.querySelector('img[alt]')?.alt;
           if (!name) throw new Error('Nome de jogador indisponível.');
           return [{ id, name, kills: Number(rawKills) }];
         });
@@ -86,8 +88,9 @@ async function processMessages(backup) {
       let result;
       try {
         result = summarizeMatch(await readMatch(id));
-      } catch {
+      } catch (error) {
         // An unfinished or unavailable match stays eligible for a later check.
+        console.log('Partida aguardando leitura:', id, error instanceof Error ? error.message.split('\n')[0] : 'Falha no placar');
         continue;
       }
       if (wasPublished(await recentMessages(), id)) continue;
@@ -99,6 +102,7 @@ async function processMessages(backup) {
         enforce_nonce: true,
       } });
       messages.push(reply);
+      console.log('Resumo publicado para a partida', id);
     }
   }
 }
