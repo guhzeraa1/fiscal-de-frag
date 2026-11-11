@@ -1,0 +1,25 @@
+name: Fiscal de Frag reserva
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3-58/5 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: fiscal-de-frag
+  cancel-in-progress: false
+jobs:
+  verificar-canal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --omit=dev
+      - run: npx playwright install --with-deps chromium
+      - run: node bot.mjs --backup
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
